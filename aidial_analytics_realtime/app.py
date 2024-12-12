@@ -1,3 +1,4 @@
+import contextlib
 import json
 import logging
 import re
@@ -25,27 +26,25 @@ RATE_PATTERN = r"/v1/(.+?)/rate"
 CHAT_COMPLETION_PATTERN = r"/openai/deployments/(.+?)/chat/completions"
 EMBEDDING_PATTERN = r"/openai/deployments/(.+?)/embeddings"
 
-app = FastAPI()
+
+@contextlib.asynccontextmanager
+async def lifespan(app: FastAPI):
+    influx_client, influx_writer = create_influx_writer()
+    async with influx_client:
+        app.dependency_overrides[InfluxWriterAsync] = lambda: influx_writer
+
+        topic_model = TopicModel()
+        app.dependency_overrides[TopicModel] = lambda: topic_model
+
+        rates_calculator = RatesCalculator()
+        app.dependency_overrides[RatesCalculator] = lambda: rates_calculator
+
+        yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 configure_loggers()
-
-
-@app.on_event("startup")
-async def startup_event():
-    influx_client, influx_writer = create_influx_writer()
-    app.state.influx_client = influx_client
-    app.dependency_overrides[InfluxWriterAsync] = lambda: influx_writer
-
-    topic_model = TopicModel()
-    app.dependency_overrides[TopicModel] = lambda: topic_model
-
-    rates_calculator = RatesCalculator()
-    app.dependency_overrides[RatesCalculator] = lambda: rates_calculator
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    await app.state.influx_client.close()
 
 
 async def on_rate_message(
