@@ -6,6 +6,7 @@ from datetime import datetime
 
 import uvicorn
 from fastapi import Depends, FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from aidial_analytics_realtime.analytics import (
     RequestType,
@@ -216,8 +217,7 @@ async def on_log_message(
     execution_path = message.get("execution_path", None)
     deployment = message.get("deployment", "")
 
-    match = re.search(RATE_PATTERN, uri)
-    if match:
+    if re.search(RATE_PATTERN, uri):
         await on_rate_message(
             deployment,
             project_id,
@@ -230,8 +230,7 @@ async def on_log_message(
             influx_writer,
         )
 
-    match = re.search(CHAT_COMPLETION_PATTERN, uri)
-    if match:
+    elif re.search(CHAT_COMPLETION_PATTERN, uri):
         await on_chat_completion_message(
             deployment,
             project_id,
@@ -251,8 +250,7 @@ async def on_log_message(
             execution_path,
         )
 
-    match = re.search(EMBEDDING_PATTERN, uri)
-    if match:
+    elif re.search(EMBEDDING_PATTERN, uri):
         await on_embedding_message(
             deployment,
             project_id,
@@ -272,6 +270,9 @@ async def on_log_message(
             execution_path,
         )
 
+    else:
+        logger.warning(f"Unsupported message type: {uri!r}")
+
 
 @app.post("/data")
 async def on_log_messages(
@@ -282,7 +283,8 @@ async def on_log_messages(
 ):
     data = await request.json()
 
-    for item in data:
+    statuses = []
+    for idx, item in enumerate(data):
         try:
             await on_log_message(
                 json.loads(item["message"]),
@@ -291,7 +293,14 @@ async def on_log_messages(
                 rates_calculator,
             )
         except Exception as e:
-            logging.exception(e)
+            logging.exception(f"Error processing message #{idx}")
+            statuses.append({"status": "error", "error": str(e)})
+        else:
+            statuses.append({"status": "success"})
+
+    # Returning 200 code even if processing of some messages has failed,
+    # since the log broker that sends the messages may decide to retry the failed requests.
+    return JSONResponse(content=statuses, status_code=200)
 
 
 @app.get("/health")
