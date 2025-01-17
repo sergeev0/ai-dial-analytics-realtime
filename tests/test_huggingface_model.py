@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import aidial_analytics_realtime.app as app
-from tests.influx_writer_mock import InfluxWriterMock
+from tests.mocks import InfluxWriterMock
 
 
 @pytest.mark.with_external
@@ -26,6 +26,7 @@ def test_data_request():
                         "chat": {"id": "chat-1"},
                         "project": {"id": "PROJECT-KEY"},
                         "user": {"id": "", "title": ""},
+                        "deployment": "gpt-4",
                         "request": {
                             "protocol": "HTTP/1.1",
                             "method": "POST",
@@ -79,6 +80,7 @@ def test_data_request_with_new_format():
                         "chat": {"id": "chat-1"},
                         "project": {"id": "PROJECT-KEY"},
                         "user": {"id": "", "title": ""},
+                        "deployment": "gpt-4",
                         "token_usage": {
                             "completion_tokens": 40,
                             "prompt_tokens": 30,

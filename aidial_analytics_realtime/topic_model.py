@@ -2,6 +2,10 @@ import os
 
 from bertopic import BERTopic
 
+from aidial_analytics_realtime.utils.concurrency import (
+    run_in_cpu_tasks_executor,
+)
+
 
 class TopicModel:
     def __init__(
@@ -18,22 +22,23 @@ class TopicModel:
         self.model = BERTopic.load(
             topic_model_name, topic_embeddings_model_name
         )
-        self.model.transform(["test"])  # Make sure the model is loaded
 
-    def get_topic(self, request_messages, response_content):
-        text = "\n\n".join(
-            [message["content"] for message in request_messages]
-            + [response_content]
-        )
+        # Make sure the model is loaded
+        self._get_topic_by_text("test")
 
-        return self.get_topic_by_text(text)
+    async def get_topic_by_text(self, text: str) -> str | None:
+        return await run_in_cpu_tasks_executor(self._get_topic_by_text, text)
 
-    def get_topic_by_text(self, text):
+    def _get_topic_by_text(self, text: str) -> str | None:
+        text = text.strip()
+        if not text:
+            return None
+
         topics, _ = self.model.transform([text])
         topic = self.model.get_topic_info(topics[0])
 
         if "GeneratedName" in topic:
             # "GeneratedName" is an expected name for the human readable topic representation
-            return topic["GeneratedName"][0][0][0]
+            return topic["GeneratedName"][0][0][0]  # type: ignore
 
-        return topic["Name"][0]
+        return topic["Name"][0]  # type: ignore
